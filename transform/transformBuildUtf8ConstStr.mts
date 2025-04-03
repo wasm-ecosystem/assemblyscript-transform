@@ -50,6 +50,7 @@ import {
   StringLiteralExpression,
   ArrayLiteralExpression,
   ObjectLiteralExpression,
+  Range,
 } from "assemblyscript";
 import assert from "node:assert";
 import { exit } from "node:process";
@@ -315,56 +316,80 @@ export default class TransformBuildUtf8ConstStr extends Transform {
     if (expression.kind === NodeKind.PropertyAccess) {
       const propertyAccessExpression = expression as PropertyAccessExpression;
       const leftExpression = propertyAccessExpression.expression;
-      if (leftExpression.kind === NodeKind.Identifier) {
-        const identifier = leftExpression as IdentifierExpression;
-        const property = propertyAccessExpression.property;
-        if (identifier.text === "utf8" && property.text === "build") {
-          assert(node.args.length === 1);
-          if (node.args[0].kind === NodeKind.Literal) {
-            property.text = "build_internal";
-            const oldArg = node.args[0] as LiteralExpression;
-            assert(oldArg.literalKind === LiteralKind.String);
-            const literalString = (oldArg as StringLiteralExpression).value;
 
-            const range = oldArg.range;
-
-            const builtinExpression = PropertyAccessExpression.createPropertyAccessExpression(
-              IdentifierExpression.createIdentifierExpression("memory", range),
-              IdentifierExpression.createIdentifierExpression("data", range),
-              range
-            );
-
-            const stringBytesLiteral: IntegerLiteralExpression[] = [];
-
-            const buffer = Buffer.from(literalString, "utf8");
-            for (const byte of buffer) {
-              const byteLiteral = LiteralExpression.createIntegerLiteralExpression(i64_new(byte, 0), range);
-              stringBytesLiteral.push(byteLiteral);
-            }
-
-            const arrayLiteral = LiteralExpression.createArrayLiteralExpression(stringBytesLiteral, range);
-
-            const u8TypeName = Node.createSimpleTypeName("u8", range);
-            const builtinCallExpression = CallExpression.createCallExpression(
-              builtinExpression,
-              [Node.createNamedType(u8TypeName, [], false, range)],
-              [arrayLiteral],
-              range
-            );
-
-            const literalStrLength = LiteralExpression.createIntegerLiteralExpression(i64_new(buffer.length, 0), range);
-            node.args = [builtinCallExpression, literalStrLength];
-            debugLog(ASTBuilder.build(node));
-          } else {
-            const message = `In file ${this.currentFile}
-            ${ASTBuilder.build(node)} 
-            utf8.build only accept string literal`;
-            console.error(message);
-            exit(1);
-          }
-        }
+      if (this.isUtf8BuildCall(leftExpression, propertyAccessExpression)) {
+        this.handleUtf8BuildCall(node, propertyAccessExpression);
       }
     }
+  }
+
+  private isUtf8BuildCall(leftExpression: Node, propertyAccessExpression: PropertyAccessExpression): boolean {
+    if (leftExpression.kind === NodeKind.Identifier) {
+      const identifier = leftExpression as IdentifierExpression;
+      const property = propertyAccessExpression.property;
+      return identifier.text === "utf8" && property.text === "build";
+    }
+    return false;
+  }
+
+  private handleUtf8BuildCall(node: CallExpression, propertyAccessExpression: PropertyAccessExpression): void {
+    assert(node.args.length === 1);
+    const arg = node.args[0];
+
+    if (arg.kind === NodeKind.Literal) {
+      this.transformUtf8BuildCall(node, propertyAccessExpression, arg as LiteralExpression);
+    } else {
+      this.logAndExitOnInvalidUtf8BuildCall(node);
+    }
+  }
+
+  private transformUtf8BuildCall(
+    node: CallExpression,
+    propertyAccessExpression: PropertyAccessExpression,
+    oldArg: LiteralExpression
+  ): void {
+    propertyAccessExpression.property.text = "build_internal";
+    assert(oldArg.literalKind === LiteralKind.String);
+
+    const literalString = (oldArg as StringLiteralExpression).value;
+    const range = oldArg.range;
+
+    const builtinExpression = PropertyAccessExpression.createPropertyAccessExpression(
+      IdentifierExpression.createIdentifierExpression("memory", range),
+      IdentifierExpression.createIdentifierExpression("data", range),
+      range
+    );
+
+    const stringBytesLiteral = this.createStringBytesLiteral(literalString, range);
+    const arrayLiteral = LiteralExpression.createArrayLiteralExpression(stringBytesLiteral, range);
+
+    const u8TypeName = Node.createSimpleTypeName("u8", range);
+    const builtinCallExpression = CallExpression.createCallExpression(
+      builtinExpression,
+      [Node.createNamedType(u8TypeName, [], false, range)],
+      [arrayLiteral],
+      range
+    );
+
+    const literalStrLength = LiteralExpression.createIntegerLiteralExpression(
+      i64_new(Buffer.from(literalString, "utf8").length, 0),
+      range
+    );
+    node.args = [builtinCallExpression, literalStrLength];
+    debugLog(ASTBuilder.build(node));
+  }
+
+  private createStringBytesLiteral(literalString: string, range: Range): IntegerLiteralExpression[] {
+    const buffer = Buffer.from(literalString, "utf8");
+    return Array.from(buffer).map((byte) => LiteralExpression.createIntegerLiteralExpression(i64_new(byte, 0), range));
+  }
+
+  private logAndExitOnInvalidUtf8BuildCall(node: CallExpression): void {
+    const message = `In file ${this.currentFile}
+    ${ASTBuilder.build(node)} 
+    utf8.build only accept string literal`;
+    console.error(message);
+    exit(1);
   }
 
   visitClassExpression(node: ClassExpression) {
