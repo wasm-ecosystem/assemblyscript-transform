@@ -8,9 +8,7 @@
     "sourceMap": true,
     "paths": {
       "assemblyscript": ["../node_modules/assemblyscript/dist/assemblyscript"],
-      "assemblyscript/transform": [
-        "../node_modules/assemblyscript/dist/transform"
-      ]
+      "assemblyscript/transform": ["../node_modules/assemblyscript/dist/transform"]
     }
   },
   "files": ["transformBuildUtf8ConstStr.mts"],

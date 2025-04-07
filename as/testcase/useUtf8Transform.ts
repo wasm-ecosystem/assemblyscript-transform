@@ -4,7 +4,7 @@ import { utf8 } from "../utf8ConstStr";
 class C1 {
   constructor(
     public name: utf8.ConstStr,
-    public length: u32,
+    public length: u32
   ) {}
 }
 
