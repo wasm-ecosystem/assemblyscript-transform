@@ -36,6 +36,7 @@ test("transform convert utf8 success", () => {
   expect(watContent).toContain("test1");
   expect(watContent).toContain("test2");
   expect(watContent).toContain("test3");
+  expect(watContent).toContain("test4");
 });
 
 test("transform not string literal", () => {
