@@ -319,7 +319,11 @@ export default class TransformBuildUtf8ConstStr extends Transform {
 
       if (this.isUtf8BuildCall(leftExpression, propertyAccessExpression)) {
         this.handleUtf8BuildCall(node, propertyAccessExpression);
+        return;
       }
+    }
+    for (const arg of node.args) {
+      this.visitNode(arg);
     }
   }
 
